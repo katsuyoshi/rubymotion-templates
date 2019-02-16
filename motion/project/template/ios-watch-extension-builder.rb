@@ -72,11 +72,40 @@ module Motion; module Project
       generate_info_plist(config, platform)
     end
 
-    def build_watch_extension(config, platform, opts)
+    def build_watch_extension(config, platform, opts, arch=nil)
       unless ENV['RM_TARGET_BUILD']
         App.fail "Extension targets must be built from an application project"
       end
-      build_extension(config, platform, opts)
+
+      build_extension(config, platform, opts, arch=nil)
+      if Util::Version.new(config.sdk_version) >= Util::Version.new("5.0")
+        main_exec = config.app_bundle_executable(platform)
+
+        arm64_32_exec = "#{main_exec}.arm64_32"
+        armv7k_exec = "#{main_exec}.armv7k"
+
+        build_dir = File.join(config.versionized_build_dir(platform))
+        objs_build_dir = File.join(build_dir, 'objs')
+        arm64_32_objs_build_dir = File.join(build_dir, 'arm64_32_objs')
+        armv7k_exec_objs_build_dir = File.join(build_dir, 'armv7k_objs')
+
+        FileUtils.mv(main_exec, armv7k_exec)
+        FileUtils.mv(objs_build_dir, armv7k_exec_objs_build_dir)
+        FileUtils.mv(arm64_32_objs_build_dir, objs_build_dir) if File.exist? arm64_32_objs_build_dir
+
+        build_extension(config, platform, opts, 'arm64_32')
+
+        FileUtils.mv(main_exec, arm64_32_exec)
+
+        sh "/usr/bin/lipo -create \"#{arm64_32_exec}\" \"#{armv7k_exec}\" -output \"#{main_exec}\""
+
+        FileUtils.rm armv7k_exec
+        FileUtils.rm arm64_32_exec
+
+        FileUtils.mv(objs_build_dir, arm64_32_objs_build_dir)
+        FileUtils.mv(armv7k_exec_objs_build_dir, objs_build_dir)
+      end
+
       build_watch_app(config.watch_app_config, platform, opts)
     end
     alias_method "build_extension", "build"

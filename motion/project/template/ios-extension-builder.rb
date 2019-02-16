@@ -41,7 +41,8 @@ module Motion; module Project
       FileUtils.cp config.provisioning_profile, bundle_provision
     end
 
-    def build(config, platform, opts)
+    def build(config, platform, opts, arch=nil)
+      arch ||= 'armv7k'
       unless ENV['RM_TARGET_BUILD']
         App.fail "Extension targets must be built from an application project"
       end
@@ -165,7 +166,7 @@ module Motion; module Project
                 src_path = '/tmp/__dummy_object_file__.c'
                 obj_path = '/tmp/__dummy_object_file__.o'
                 File.open(src_path, 'w') { |io| io.puts "static int foo(void) { return 42; }" }
-                sh "#{cc} -c #{src_path} -o #{obj_path} -arch armv7k -fembed-bitcode"
+                sh "#{cc} -c #{src_path} -o #{obj_path} -arch #{arch} -fembed-bitcode"
                 obj_path
               end
               sh "#{cxx} -fexceptions -c -marm -arch #{arch} \"#{asm}\" -o \"#{arch_obj}\" -fembed-bitcode -mwatchos-version-min=#{config.deployment_target}"
@@ -284,7 +285,8 @@ EOS
       init_o = File.join(objs_build_dir, 'init.o')
       if !(File.exist?(init) and File.exist?(init_o) and File.read(init) == init_txt)
         File.open(init, 'w') { |io| io.write(init_txt) }
-        sh "#{cxx} \"#{init}\" #{config.cflags(platform, true)} -fembed-bitcode -c -o \"#{init_o}\""
+        cflags = config.cflags(platform, true).gsub(/armv7k/, arch)
+        sh "#{cxx} \"#{init}\" #{cflags} -fembed-bitcode -c -o \"#{init_o}\""
       end
 
       # Generate main file.
@@ -295,7 +297,8 @@ EOS
       main_o = File.join(objs_build_dir, 'main.o')
       if !(File.exist?(main) and File.exist?(main_o) and File.read(main) == main_txt)
         File.open(main, 'w') { |io| io.write(main_txt) }
-        sh "#{cxx} \"#{main}\" #{config.cflags(platform, true)} -fembed-bitcode -c -o \"#{main_o}\""
+        cflags = config.cflags(platform, true).gsub(/armv7k/, arch)
+        sh "#{cxx} \"#{main}\" #{cflags} -fembed-bitcode -c -o \"#{main_o}\""
       end
 
       librubymotion = File.join(datadir, platform, 'librubymotion-static.a')
@@ -350,7 +353,8 @@ EOS
 
         # Use the `-no_implicit_dylibs` linker option to hide the fact that it
         # links against `libextension.dylib` which contains `NSExtensionMain`.
-        sh "#{cxx} -o \"#{main_exec}\" #{entitlements} #{objs_list}  -fobjc-link-runtime -fapplication-extension -Xlinker -no_implicit_dylibs #{config.ldflags(platform)} -L\"#{File.join(datadir, platform)}\" -lrubymotion-static -lobjc -licucore #{linker_option} #{framework_search_paths} #{frameworks} #{weak_frameworks} #{config.libs.join(' ')} #{vendor_libs}"
+        ldflags = config.ldflags(platform).gsub(/armv7k/, arch)
+        sh "#{cxx} -o \"#{main_exec}\" #{entitlements} #{objs_list}  -fobjc-link-runtime -fapplication-extension -Xlinker -no_implicit_dylibs #{ldflags} -L\"#{File.join(datadir, platform)}\" -lrubymotion-static -lobjc -licucore #{linker_option} #{framework_search_paths} #{frameworks} #{weak_frameworks} #{config.libs.join(' ')} #{vendor_libs}"
         main_exec_created = true
       end
 
